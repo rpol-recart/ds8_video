@@ -86,10 +86,11 @@ class ProbeHandler:
         self._track_frame_counts: dict[int, int] = {}
 
         # ── OCR retry configuration ─────────────────────────
-        # No max_attempts: OCR retries while the track is alive.
+        # OCR retries while the track is alive, with a safety cap.
         ocr_retry_cfg = cfg.get("ocr", {}).get("retry", {})
         self._min_frames_for_ocr = ocr_retry_cfg.get("min_frames_before_first", 5)
         self._ocr_retry_interval = ocr_retry_cfg.get("frame_interval", 15)
+        self._max_ocr_attempts = ocr_retry_cfg.get("safety_max_attempts", 200)
 
         # Snapshot saving
         snap_cfg = cfg.get("snapshots", {})
@@ -149,7 +150,7 @@ class ProbeHandler:
 
                 state = self._track_states[track_id]
 
-                # Skip if already finished (success or exhausted retries)
+                # Skip if already successfully recognized
                 if state.finished:
                     try:
                         l_obj = l_obj.next
@@ -216,6 +217,13 @@ class ProbeHandler:
                         state, ocr_info, track_id, frame_number,
                         frame_array, bbox,
                     )
+                elif state.attempts >= self._max_ocr_attempts:
+                    # Safety cap reached — stop to prevent unbounded CPU use
+                    state.finished = True
+                    logger.warning(
+                        "OCR safety cap (%d) reached for track=%d, stopping",
+                        self._max_ocr_attempts, track_id,
+                    )
                 # else: will retry on next eligible frame while track is alive
 
                 try:
@@ -270,6 +278,9 @@ class ProbeHandler:
 
         if self._save_local:
             self._save_snapshot(frame_array, bbox, iso, frame_number)
+
+        # Free the cached frame — no longer needed after successful accept
+        state.best_frame = None
 
         logger.info(
             "Container recognized: %s | gross=%s tare=%s "
@@ -353,12 +364,15 @@ class ProbeHandler:
         """
         stale = set(self._track_frame_counts.keys()) - current_ids
         for tid in stale:
-            state = self._track_states.get(tid)
-            if state and not state.finished:
-                self._finalize_unrecognized_track(tid, state)
-
-            self._track_frame_counts.pop(tid, None)
-            self._track_states.pop(tid, None)
+            try:
+                state = self._track_states.get(tid)
+                if state and not state.finished:
+                    self._finalize_unrecognized_track(tid, state)
+            except Exception:
+                logger.error("Error finalizing track %d", tid, exc_info=True)
+            finally:
+                self._track_frame_counts.pop(tid, None)
+                self._track_states.pop(tid, None)
 
     def _update_fps(self):
         if self._frame_count % self._fps_interval == 0:

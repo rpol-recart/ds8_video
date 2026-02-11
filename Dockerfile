@@ -1,7 +1,10 @@
-FROM nvcr.io/nvidia/deepstream:7.1-triton-multiarch
+FROM nvcr.io/nvidia/deepstream:8.0-triton-multiarch
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DS_VERSION=7.1
+ENV DS_VERSION=8.0
+
+# DS8 ships Ubuntu 24.04 + Python 3.12; pip requires --break-system-packages
+# inside a container where we own the full filesystem.
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,17 +24,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Python dependencies
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 
 # PaddleOCR dependencies
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --break-system-packages \
     paddlepaddle-gpu \
     paddleocr
 
-# DeepStream Python bindings
-RUN pip3 install --no-cache-dir \
-    pyds-ext \
-    cuda-python
+# DeepStream Python bindings (pyds) are pre-installed in DS8 container at
+# /opt/nvidia/deepstream/deepstream/lib.  Install cuda-python only.
+RUN pip3 install --no-cache-dir --break-system-packages cuda-python
 
 WORKDIR /app
 
@@ -46,6 +48,9 @@ RUN mkdir -p /app/models/yolo && \
     if [ ! -f /app/models/yolo/best.onnx ]; then \
         echo "Place your trained container detection ONNX model at /app/models/yolo/best.onnx"; \
     fi
+
+# NOTE: TensorRT 10.x (DS8) is NOT compatible with TRT 8.x engine files.
+# You MUST regenerate .engine files on first run or delete old cached engines.
 
 ENV PYTHONPATH=/app/src:${PYTHONPATH}
 ENV GST_DEBUG=2

@@ -52,6 +52,7 @@ ocr:
   retry:
     frame_interval: 15           # min frames between retry attempts
     min_frames_before_first: 5   # wait N frames before first OCR attempt
+    safety_max_attempts: 200     # hard cap to prevent unbounded CPU use
   # Expected text patterns
   patterns:
     iso_number: "^[A-Z]{4}\\d{7}$"            # e.g. MSCU1234567

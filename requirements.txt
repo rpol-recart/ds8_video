@@ -1,7 +1,7 @@
 confluent-kafka==2.3.0
 redis==5.0.1
 prometheus-client==0.20.0
-numpy==1.26.4
+numpy>=1.26.4,<2.0
 opencv-python-headless==4.9.0.80
 Pillow==10.2.0
 pyyaml==6.0.1

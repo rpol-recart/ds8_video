@@ -1,4 +1,4 @@
-"""DeepStream 7.x / GStreamer pipeline for container detection.
+"""DeepStream 8.x / GStreamer pipeline for container detection.
 
 Pipeline structure:
   rtspsrc → rtph264depay → nvv4l2decoder → nvstreammux
@@ -7,6 +7,12 @@ Pipeline structure:
     → nvvideoconvert → capsfilter (RGBA)
     → [probe: OCR + Kafka + dedup]
     → fakesink
+
+DS8 compatibility notes:
+  - pyds API (cast(), hash(), linked list iteration) unchanged from DS7.
+  - request_pad_simple() used (get_request_pad() deprecated since GStreamer 1.20).
+  - TensorRT 10.x engines are NOT compatible with TRT 8.x — delete cached
+    .engine files when migrating from DS7.
 """
 
 import logging

@@ -3,15 +3,54 @@
 Supports two backends:
   - Redis  (production, shared across restarts)
   - Memory (development / testing)
+
+Fuzzy matching strategy (replacing O(n) full-scan):
+  ISO 6346 numbers have the form ABCD1234567 (11 chars).  OCR errors
+  typically confuse visually similar characters (O↔0, I↔1, S↔5, B↔8,
+  Z↔2, G↔6).  Instead of scanning ALL stored keys, we generate a
+  small set of plausible OCR-error variants and check each one — O(1)
+  Redis lookups per variant, bounded total.
 """
 
-import hashlib
 import logging
 import time
-from difflib import SequenceMatcher
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Characters commonly confused by OCR on container markings
+_OCR_CONFUSIONS: dict[str, str] = {
+    "O": "0", "0": "O",
+    "I": "1", "1": "I",
+    "S": "5", "5": "S",
+    "B": "8", "8": "B",
+    "Z": "2", "2": "Z",
+    "G": "6", "6": "G",
+    "D": "0",
+    "Q": "0",
+}
+
+
+def _normalize(iso_number: str) -> str:
+    """Canonical form: uppercase, no spaces/dashes."""
+    return iso_number.strip().upper().replace(" ", "").replace("-", "")
+
+
+def _ocr_variants(iso: str, max_variants: int = 50) -> list[str]:
+    """Generate plausible OCR-error variants of an ISO number.
+
+    For each position where a confusion is possible, yield the variant
+    with that single character swapped.  Keeps total variants bounded.
+    """
+    variants = []
+    for i, ch in enumerate(iso):
+        alt = _OCR_CONFUSIONS.get(ch)
+        if alt:
+            variant = iso[:i] + alt + iso[i + 1:]
+            variants.append(variant)
+            if len(variants) >= max_variants:
+                break
+    return variants
 
 
 class DeduplicationStore:
@@ -21,12 +60,9 @@ class DeduplicationStore:
         self.ttl = ttl_seconds
         self.sim_threshold = similarity_threshold
 
-    def _make_key(self, iso_number: str) -> str:
-        normalized = iso_number.strip().upper().replace(" ", "")
-        return f"container:dedup:{normalized}"
-
-    def _is_similar(self, a: str, b: str) -> bool:
-        return SequenceMatcher(None, a.upper(), b.upper()).ratio() >= self.sim_threshold
+    @staticmethod
+    def _make_key(iso_number: str) -> str:
+        return f"container:dedup:{_normalize(iso_number)}"
 
     def is_duplicate(self, iso_number: str) -> bool:
         raise NotImplementedError
@@ -38,24 +74,26 @@ class DeduplicationStore:
 class RedisDeduplicationStore(DeduplicationStore):
     """Redis-backed deduplication."""
 
-    def __init__(self, redis_client, ttl_seconds: int = 300,
+    def __init__(self, redis_client, ttl_seconds: int = 86400,
                  similarity_threshold: float = 0.85):
         super().__init__(ttl_seconds, similarity_threshold)
         self.redis = redis_client
 
     def is_duplicate(self, iso_number: str) -> bool:
-        key = self._make_key(iso_number)
+        normalized = _normalize(iso_number)
+        key = self._make_key(normalized)
+
+        # Exact match — single O(1) lookup
         if self.redis.exists(key):
             return True
-        # Check for similar keys (fuzzy match) among recent entries
-        pattern = "container:dedup:*"
-        for existing_key in self.redis.scan_iter(match=pattern, count=100):
-            existing_number = existing_key.decode().split(":", 2)[-1]
-            if self._is_similar(iso_number, existing_number):
-                logger.debug(
-                    "Fuzzy duplicate found: %s ~ %s", iso_number, existing_number
-                )
+
+        # Fuzzy match — check OCR-confusion variants (bounded set of O(1) lookups)
+        for variant in _ocr_variants(normalized):
+            variant_key = f"container:dedup:{variant}"
+            if self.redis.exists(variant_key):
+                logger.debug("Fuzzy duplicate found: %s ~ %s", iso_number, variant)
                 return True
+
         return False
 
     def mark_seen(self, iso_number: str, metadata: Optional[dict] = None):
@@ -83,13 +121,21 @@ class MemoryDeduplicationStore(DeduplicationStore):
 
     def is_duplicate(self, iso_number: str) -> bool:
         self._cleanup()
-        key = self._make_key(iso_number)
+        normalized = _normalize(iso_number)
+        key = self._make_key(normalized)
+
+        # Exact match
         if key in self._store:
             return True
-        for existing_key in self._store:
-            existing_number = existing_key.split(":", 2)[-1]
-            if self._is_similar(iso_number, existing_number):
+
+        # Fuzzy match — OCR-confusion variants
+        for variant in _ocr_variants(normalized):
+            variant_key = f"container:dedup:{variant}"
+            if variant_key in self._store:
+                logger.debug("Fuzzy duplicate found (memory): %s ~ %s",
+                             iso_number, variant)
                 return True
+
         return False
 
     def mark_seen(self, iso_number: str, metadata: Optional[dict] = None):
