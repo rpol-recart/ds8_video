@@ -1,0 +1,111 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Containers Detected (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(containers_detected_total[1m]) * 60",
+          "legendFormat": "detections/min"
+        }
+      ]
+    },
+    {
+      "title": "OCR Recognitions (rate/min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(ocr_recognitions_total[1m]) * 60",
+          "legendFormat": "recognitions/min"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Messages Sent",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "kafka_messages_sent_total",
+          "legendFormat": "total sent"
+        }
+      ]
+    },
+    {
+      "title": "Duplicates Skipped",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "duplicates_skipped_total",
+          "legendFormat": "skipped"
+        }
+      ]
+    },
+    {
+      "title": "Pipeline FPS",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "pipeline_fps",
+          "legendFormat": "FPS"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Errors",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "kafka_errors_total",
+          "legendFormat": "errors"
+        }
+      ]
+    },
+    {
+      "title": "OCR Processing Latency (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(ocr_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(ocr_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ]
+    },
+    {
+      "title": "Unique Containers Recognized",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "unique_containers_recognized_total",
+          "legendFormat": "unique containers"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["container-detection"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Container Detection System",
+  "uid": "container-detection-main"
+}

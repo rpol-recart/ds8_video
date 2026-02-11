@@ -1,0 +1,87 @@
+# ═══════════════════════════════════════════════════════════════
+# Container Detection System — Application Configuration
+# ═══════════════════════════════════════════════════════════════
+
+rtsp:
+  uri: "${RTSP_URI:-rtsp://localhost:554/stream}"
+  latency: 200                 # ms
+  drop_frame_interval: 0       # 0 = no drop
+  codec: "H264"                # H264 | H265
+
+pipeline:
+  # DeepStream streammux settings
+  streammux:
+    batch_size: 1
+    width: 1920
+    height: 1080
+    batched_push_timeout: 40000  # µs
+    live_source: true
+
+  # Primary inference — container detection (YOLO)
+  detector:
+    model_engine: "/app/models/yolo/best.onnx"
+    config_file: "/app/config/ds_detector_config.txt"
+    batch_size: 1
+    interval: 0                  # infer every frame
+    confidence_threshold: 0.6
+    class_labels:
+      - container
+
+  # Object tracker (NvDCF)
+  tracker:
+    tracker_width: 960
+    tracker_height: 544
+    ll_lib_file: "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so"
+    ll_config_file: "/app/config/ds_tracker_config.yml"
+    max_age: 60                  # frames before track is dropped
+
+ocr:
+  engine: "paddleocr"
+  lang: "en"
+  use_gpu: true
+  det_db_thresh: 0.3
+  rec_batch_num: 6
+  confidence_threshold: 0.7
+  # Region of Interest relative to detected container bbox
+  roi_padding:                   # percentage of bbox to extend
+    top: 0.05
+    bottom: 0.05
+    left: 0.05
+    right: 0.05
+  # Retry strategy: OCR retries while the container is visible in frame
+  retry:
+    frame_interval: 15           # min frames between retry attempts
+    min_frames_before_first: 5   # wait N frames before first OCR attempt
+  # Expected text patterns
+  patterns:
+    iso_number: "^[A-Z]{4}\\d{7}$"            # e.g. MSCU1234567
+    weight_gross: "MAX\\.?\\s*GROSS|GROSS"
+    weight_tare: "TARE"
+    weight_net: "NET"
+    payload: "PAYLOAD|MAX\\.?\\s*PAYLOAD"
+    cube_capacity: "CU\\.?\\s*CAP|CAPACITY"
+
+deduplication:
+  backend: "redis"               # redis | memory
+  ttl_seconds: 86400             # do not re-report same container within 24 hours
+  similarity_threshold: 0.85     # Levenshtein-based text similarity
+
+kafka:
+  bootstrap_servers: "${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+  topic_results: "${KAFKA_TOPIC_RESULTS:-container-recognition-results}"
+  topic_images: "${KAFKA_TOPIC_IMAGES:-container-recognition-images}"
+  compression_type: "gzip"
+  max_message_bytes: 10485760    # 10 MB
+  acks: "all"
+  retries: 3
+  image_quality: 85              # JPEG quality for snapshots
+
+monitoring:
+  prometheus_port: 8000
+  log_level: "${LOG_LEVEL:-INFO}"
+  health_check_interval: 30      # seconds
+
+snapshots:
+  save_local: true
+  local_path: "/app/snapshots"
+  max_local_files: 1000
