@@ -48,6 +48,11 @@ ocr:
     bottom: 0.05
     left: 0.05
     right: 0.05
+  # Retry strategy for failed OCR attempts
+  retry:
+    max_attempts: 5              # max OCR calls per tracked object
+    frame_interval: 10           # min frames between retry attempts
+    min_frames_before_first: 5   # wait N frames before first OCR attempt
   # Expected text patterns
   patterns:
     iso_number: "^[A-Z]{4}\\d{7}$"            # e.g. MSCU1234567

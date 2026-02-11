@@ -35,6 +35,14 @@ kafka_errors_total = Counter(
     "kafka_errors_total",
     "Total Kafka send errors",
 )
+ocr_retries_exhausted_total = Counter(
+    "ocr_retries_exhausted_total",
+    "Tracks where OCR max retries were exhausted without valid ISO number",
+)
+ocr_partial_results_sent_total = Counter(
+    "ocr_partial_results_sent_total",
+    "Tracks where OCR sent best partial result (no ISO but had some text)",
+)
 
 # ── Gauges ───────────────────────────────────────────────────
 pipeline_fps = Gauge(
