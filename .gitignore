@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+venv/
+
+# Models (large binaries)
+models/yolo/*.onnx
+models/yolo/*.engine
+models/paddle/
+
+# Snapshots
+snapshots/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker volumes
+grafana_data/
+prometheus_data/
+
+# OS
+.DS_Store
+Thumbs.db
