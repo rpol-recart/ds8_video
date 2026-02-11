@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class DeduplicationStore:
     """Abstract deduplication interface."""
 
-    def __init__(self, ttl_seconds: int = 300, similarity_threshold: float = 0.85):
+    def __init__(self, ttl_seconds: int = 86400, similarity_threshold: float = 0.85):
         self.ttl = ttl_seconds
         self.sim_threshold = similarity_threshold
 
@@ -71,7 +71,7 @@ class RedisDeduplicationStore(DeduplicationStore):
 class MemoryDeduplicationStore(DeduplicationStore):
     """In-memory deduplication for dev/testing."""
 
-    def __init__(self, ttl_seconds: int = 300, similarity_threshold: float = 0.85):
+    def __init__(self, ttl_seconds: int = 86400, similarity_threshold: float = 0.85):
         super().__init__(ttl_seconds, similarity_threshold)
         self._store: dict[str, float] = {}  # key -> expiry timestamp
 
@@ -102,7 +102,7 @@ class MemoryDeduplicationStore(DeduplicationStore):
 def create_dedup_store(cfg: dict):
     """Factory: build the appropriate deduplication store from config."""
     backend = cfg.get("backend", "memory")
-    ttl = cfg.get("ttl_seconds", 300)
+    ttl = cfg.get("ttl_seconds", 86400)
     sim = cfg.get("similarity_threshold", 0.85)
 
     if backend == "redis":
