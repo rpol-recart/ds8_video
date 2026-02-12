@@ -1,0 +1,64 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/ONTOLOGY.md", "docs/PLAN.md"],
+  "default_agent": "architect",
+  "agent": {
+    "architect": {
+      "description": "Iterative software architecture design agent with file-based memory for 64K-context local LLMs",
+      "mode": "primary",
+      "temperature": 0.1,
+      "top_p": 0.9,
+      "steps": 30,
+      "color": "#7C3AED",
+      "prompt": "{file:./.opencode/agents/architect.md}",
+      "tools": {
+        "read": true,
+        "write": true,
+        "edit": true,
+        "glob": true,
+        "grep": true,
+        "bash": true,
+        "list": true,
+        "todoread": true,
+        "todowrite": true,
+        "webfetch": false,
+        "websearch": false
+      },
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status": "allow",
+          "git add *": "allow",
+          "git commit *": "allow",
+          "git log *": "allow",
+          "git diff *": "allow",
+          "ls *": "allow",
+          "wc *": "allow"
+        },
+        "edit": "allow",
+        "write": "allow",
+        "read": "allow"
+      }
+    },
+    "reviewer": {
+      "description": "Read-only code review agent that checks implementation against PLAN.md specs",
+      "mode": "subagent",
+      "temperature": 0.1,
+      "color": "#F59E0B",
+      "tools": {
+        "read": true,
+        "glob": true,
+        "grep": true,
+        "list": true,
+        "write": false,
+        "edit": false,
+        "bash": false
+      },
+      "permission": {
+        "bash": "deny",
+        "edit": "deny",
+        "write": "deny"
+      }
+    }
+  }
+}

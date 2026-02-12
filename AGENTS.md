@@ -1,104 +1,81 @@
-# AI Agents
+# Project Rules
 
-## Architect — Iterative Software Design Agent
+## Repository: ds8_video
 
-**Spec:** [`.opencode/agents/architect.md`](.opencode/agents/architect.md)
+Real-time ISO container number detection from RTSP camera streams using
+NVIDIA DeepStream 8, YOLO, PaddleOCR, Kafka, Redis.
 
-### Purpose
+## Agent Configuration
 
-Agent for iterative co-design of software architecture with the user.
-Designed for **local LLMs with limited context** (64K tokens): Qwen 2.5, DeepSeek-R1,
-Mistral, Llama 3, Phi-3, and similar models running on Ollama / LM Studio / vLLM.
+This project uses OpenCode AI with custom agents. Config: `opencode.json`.
 
-### How It Works
+### Available Agents
+
+| Agent | Mode | Purpose | Invoke |
+|-------|------|---------|--------|
+| `architect` | primary | Iterative architecture design with file-based memory | `@architect` or default |
+| `reviewer` | subagent | Read-only code review against PLAN.md specs | `@reviewer` |
+
+### How the Architect Agent Works
+
+The architect agent is designed for **local LLMs with 64K token context**.
+It compensates for limited context by using external file-based memory:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    64K Context Window                    │
-├──────────┬──────────┬────────────┬──────────┬───────────┤
-│  System  │ ONTOLOGY │   PLAN.md  │  Source  │ Response  │
-│  Prompt  │   .md    │  (current  │  files   │           │
-│  ~4K     │  ≤12K    │  section)  │ (on-     │  ≤8K      │
-│          │          │  ≤12K      │ demand)  │           │
-│          │          │            │ ≤16K     │           │
-└──────────┴──────────┴────────────┴──────────┴───────────┘
-         ↑                    ↑
-    "Long-term         "Working memory"
-     memory"         (loaded per-phase)
+┌──────────────────── 64K Context Window ────────────────────┐
+│ System   │ ONTOLOGY.md │ PLAN.md  │ Source   │ Response    │
+│ ~4K      │ ≤12K        │ ≤12K     │ ≤16K     │ ≤8K         │
+└──────────┴─────────────┴──────────┴──────────┴─────────────┘
 ```
 
-The agent compensates for the small context window by:
+**Memory files** (always re-read at turn start):
+- `docs/ONTOLOGY.md` — domain model, glossary, entities, invariants
+- `docs/PLAN.md` — ADRs, components, roadmap, session log
 
-1. **External memory in files** — all decisions, domain knowledge, and progress
-   are stored in `docs/ONTOLOGY.md` and `docs/PLAN.md`, not in conversation
-   history.
+**Phases:** Bootstrap → Domain Decomposition → ADRs → Component Design →
+Implementation Plan → Guided Implementation
 
-2. **Phase-based workflow** — work is split into 6 phases (0–5), each small
-   enough to fit in context. Only data relevant to the current phase is loaded.
-
-3. **Read-before-speak protocol** — every turn starts by re-reading the doc
-   files, restoring full project context regardless of conversation history.
-
-4. **Context overflow recovery** — when context approaches capacity, the agent
-   saves a session summary to `PLAN.md` and asks to start a fresh conversation.
-
-### Workflow Phases
-
-| Phase | Name | Input | Output |
-|-------|------|-------|--------|
-| 0 | Bootstrap | User's project idea | `ONTOLOGY.md` + `PLAN.md` created |
-| 1 | Domain Decomposition | User answers | Entities, relations, invariants, ER diagram |
-| 2 | Architecture Decisions | Trade-off discussions | ADRs in `PLAN.md` |
-| 3 | Component Design | Accepted ADRs | Module interfaces, data structures, diagrams |
-| 4 | Implementation Plan | Component specs | Ordered increments with file-level roadmap |
-| 5 | Guided Implementation | Roadmap | Code, tests, progress updates |
-
-### Usage with OpenCode
+### Quick Start
 
 ```bash
-# 1. Start opencode with the architect agent
-opencode --agent .opencode/agents/architect.md
+# With opencode CLI
+opencode                          # uses architect by default (see opencode.json)
+opencode agent list               # show available agents
 
-# 2. Or set in config (~/.config/opencode/config.toml)
-# [agents.architect]
-# path = ".opencode/agents/architect.md"
-
-# 3. Then in opencode:
-# /agent architect
+# Or create a new agent interactively
+opencode agent create
 ```
 
-### Usage with Other Tools
+## Code Conventions
 
-The agent spec is a standard Markdown system prompt. It works with any tool
-that accepts a system prompt:
+- Python 3.12, type hints encouraged
+- Functions ≤ 40 lines
+- JSON structured logging via `python-json-logger`
+- Config: YAML with `${ENV_VAR:-default}` substitution
+- Tests: pytest, in `tests/` directory
 
-```bash
-# Ollama
-ollama run qwen2.5:32b --system "$(cat .opencode/agents/architect.md)"
+## File Structure
 
-# LM Studio — paste into System Prompt field
-
-# aider
-aider --system-prompt .opencode/agents/architect.md
-
-# Continue.dev — add to config.json as system message
+```
+src/
+  main.py                    # Entry point
+  pipeline/                  # DeepStream GStreamer pipeline
+  ocr/                       # PaddleOCR wrapper + ISO parser
+  kafka_producer/            # Kafka publisher
+  monitoring/                # Prometheus metrics + health check
+  utils/                     # Config, dedup, logger
+config/                      # YAML/TXT configs, Grafana dashboards
+docs/
+  ONTOLOGY.md                # Domain ontology (agent-managed)
+  PLAN.md                    # Implementation plan (agent-managed)
+models/yolo/                 # YOLO ONNX model files
+tests/                       # Unit tests
 ```
 
-### Files Managed by This Agent
+## Important Notes
 
-| File | Purpose | Token Budget |
-|------|---------|--------------|
-| `docs/ONTOLOGY.md` | Domain knowledge, glossary, entity model | ≤12 000 |
-| `docs/PLAN.md` | ADRs, components, roadmap, session log | ≤12 000 |
-| `docs/ONTOLOGY_detail_*.md` | Overflow sections (created if needed) | ≤8 000 each |
-
-### Tips for Small Models
-
-- **Keep questions focused.** Don't ask "design the whole system" — ask
-  "what entities exist in the domain?"
-- **One phase per session.** If your model struggles, complete one phase,
-  then start a new conversation. The agent restores state from files.
-- **Review file edits.** Weaker models may produce invalid YAML/Mermaid.
-  Check the doc files after each phase.
-- **Use 32B+ models for Phase 2–3.** Architecture decisions and interface
-  design benefit from larger models. Phases 0–1 and 4–5 work fine on 7B–14B.
+- DeepStream 8 uses TensorRT 10.x — old `.engine` files are incompatible
+- `pyds` is pre-installed in the DS8 container, do not pip install it
+- Use `--break-system-packages` for pip in Dockerfile (Python 3.12 / Ubuntu 24.04)
+- Redis dedup uses fuzzy matching (O/0, I/1 confusion) with max 50 variants
+- OCR retry is capped at 200 attempts per track
